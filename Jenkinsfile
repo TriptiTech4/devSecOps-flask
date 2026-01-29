@@ -2,6 +2,7 @@ pipeline {
     agent any
 
     environment {
+        IMAGE_NAME = "devsecops-flask"
         SONAR_PROJECT_KEY = "devsecops-flask"
         SONAR_PROJECT_NAME = "devsecops-flask"
     }
@@ -18,7 +19,7 @@ pipeline {
             steps {
                 withSonarQubeEnv('sonarqube') {
                     script {
-                        def scannerHome = tool 'sonar-scanner'
+                        def scannerHome = tool name: 'sonar-scanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
                         sh """
                         ${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
@@ -35,7 +36,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 2, unit: 'MINUTES') {
+                timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -43,23 +44,25 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t devsecops-flask .'
+                sh "docker build -t ${IMAGE_NAME}:latest ."
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image devsecops-flask || true'
+                sh """
+                trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:latest
+                """
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline completed successfully!'
+            echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo '❌ Pipeline failed. Check logs.'
+            echo "❌ Pipeline failed. Check logs."
         }
     }
 }
