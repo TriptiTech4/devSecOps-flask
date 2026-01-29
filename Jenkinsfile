@@ -1,17 +1,15 @@
 pipeline {
     agent any
 
-    tools {
-        git 'Default'
-    }
-
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'
+        SONARQUBE_SERVER = 'sonarqube'     // Name exactly as in Jenkins > Manage Jenkins > System
+        IMAGE_NAME = 'devsecops-flask'
+        IMAGE_TAG = 'latest'
     }
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout SCM') {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/TriptiTech4/devSecOps-flask.git'
@@ -20,26 +18,51 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
+                withSonarQubeEnv("${SONARQUBE_SERVER}") {
                     sh '''
-                    $SCANNER_HOME/bin/sonar-scanner \
+                    sonar-scanner \
                     -Dsonar.projectKey=devsecops-flask \
                     -Dsonar.projectName=devsecops-flask \
                     -Dsonar.sources=. \
-                    -Dsonar.host.url=http://sonarqube:9000 \
-                    -Dsonar.login=$SONAR_AUTH_TOKEN
+                    -Dsonar.language=py \
+                    -Dsonar.python.version=3 \
+                    -Dsonar.sourceEncoding=UTF-8
                     '''
                 }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                '''
+            }
+        }
+
+        stage('Trivy Image Scan') {
+            steps {
+                sh '''
+                trivy image --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "✅ Pipeline completed successfully"
+            echo "✅ Pipeline completed successfully!"
         }
         failure {
-            echo "❌ Pipeline failed"
+            echo "❌ Pipeline failed. Check logs."
         }
     }
 }
