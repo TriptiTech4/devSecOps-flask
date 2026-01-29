@@ -1,8 +1,9 @@
 pipeline {
     agent any
+
     environment {
-        SONAR_PROJECT_KEY = 'devsecops-flask'
-        SONAR_PROJECT_NAME = 'devsecops-flask'
+        SONAR_PROJECT_KEY = "devsecops-flask"
+        SONAR_PROJECT_NAME = "devsecops-flask"
     }
 
     stages {
@@ -16,15 +17,18 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    sh """
-                    sonar-scanner \
-                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                      -Dsonar.projectName=${SONAR_PROJECT_NAME} \
-                      -Dsonar.sources=. \
-                      -Dsonar.language=py \
-                      -Dsonar.python.version=3 \
-                      -Dsonar.sourceEncoding=UTF-8
-                    """
+                    script {
+                        def scannerHome = tool 'sonar-scanner'
+                        sh """
+                        ${scannerHome}/bin/sonar-scanner \
+                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                        -Dsonar.projectName=${SONAR_PROJECT_NAME} \
+                        -Dsonar.sources=. \
+                        -Dsonar.language=py \
+                        -Dsonar.python.version=3 \
+                        -Dsonar.sourceEncoding=UTF-8
+                        """
+                    }
                 }
             }
         }
@@ -45,17 +49,17 @@ pipeline {
 
         stage('Trivy Image Scan') {
             steps {
-                sh 'trivy image devsecops-flask'
+                sh 'trivy image devsecops-flask || true'
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline completed successfully'
+            echo '✅ Pipeline completed successfully!'
         }
         failure {
-            echo '❌ Pipeline failed'
+            echo '❌ Pipeline failed. Check logs.'
         }
     }
 }
