@@ -2,27 +2,26 @@ pipeline {
     agent any
 
     environment {
-        SONARQUBE_SERVER = 'sonarqube'     // Name exactly as in Jenkins > Manage Jenkins > System
-        IMAGE_NAME = 'devsecops-flask'
-        IMAGE_TAG = 'latest'
+        SONAR_PROJECT_KEY = "devsecops-flask"
+        SONAR_PROJECT_NAME = "devsecops-flask"
+        DOCKER_IMAGE = "devsecops-flask:latest"
     }
 
     stages {
 
-        stage('Checkout SCM') {
+        stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/TriptiTech4/devSecOps-flask.git'
+                checkout scm
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                withSonarQubeEnv('sonarqube') {
                     sh '''
                     sonar-scanner \
-                    -Dsonar.projectKey=devsecops-flask \
-                    -Dsonar.projectName=devsecops-flask \
+                    -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                    -Dsonar.projectName=${SONAR_PROJECT_NAME} \
                     -Dsonar.sources=. \
                     -Dsonar.language=py \
                     -Dsonar.python.version=3 \
@@ -34,7 +33,7 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 2, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
@@ -43,7 +42,7 @@ pipeline {
         stage('Docker Build') {
             steps {
                 sh '''
-                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                docker build -t ${DOCKER_IMAGE} .
                 '''
             }
         }
@@ -51,7 +50,8 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 sh '''
-                trivy image --severity HIGH,CRITICAL ${IMAGE_NAME}:${IMAGE_TAG}
+                trivy image --exit-code 0 --severity LOW,MEDIUM ${DOCKER_IMAGE}
+                trivy image --exit-code 1 --severity HIGH,CRITICAL ${DOCKER_IMAGE}
                 '''
             }
         }
@@ -59,7 +59,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Pipeline completed successfully!"
+            echo "✅ Pipeline completed successfully"
         }
         failure {
             echo "❌ Pipeline failed. Check logs."
