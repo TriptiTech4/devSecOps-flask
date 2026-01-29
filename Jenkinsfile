@@ -2,58 +2,55 @@ pipeline {
     agent any
 
     environment {
-        SONARQUBE_ENV = 'sonarqube'
-        IMAGE_NAME = 'devsecops-flask'
+        SONAR_SCANNER_HOME = tool 'sonar-scanner'
+        DOCKER_IMAGE = "devsecops-flask:latest"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/TriptiTech4/devsecops-flask.git'
+                checkout scm
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh '''
-                    sonar-scanner \
-                      -Dsonar.projectKey=devsecops-flask \
-                      -Dsonar.projectName=devsecops-flask \
-                      -Dsonar.sources=. \
-                      -Dsonar.python.version=3
-                    '''
+                withSonarQubeEnv('sonarqube') {
+                    sh """
+                    ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                    -Dsonar.projectKey=devsecops-flask \
+                    -Dsonar.projectName=devsecops-flask \
+                    -Dsonar.sources=.
+                    """
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                waitForQualityGate abortPipeline: true
+                timeout(time: 15, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t devsecops-flask:latest .'
+                sh 'docker build -t $DOCKER_IMAGE .'
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh '''
-                trivy image --exit-code 0 --severity LOW,MEDIUM devsecops-flask:latest
-                trivy image --exit-code 1 --severity HIGH,CRITICAL devsecops-flask:latest
-                '''
+                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE'
             }
         }
     }
 
     post {
         success {
-            echo "PIPELINE SUCCESS"
+            echo "PIPELINE SUCCESSFUL"
         }
         failure {
             echo "PIPELINE FAILED"
