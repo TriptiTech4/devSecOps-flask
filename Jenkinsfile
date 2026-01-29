@@ -1,58 +1,60 @@
 pipeline {
     agent any
 
+    tools {
+        jdk 'jdk11'
+        python 'python3'
+    }
+
     environment {
-        IMAGE_NAME = "devsecops-flask"
-        SONAR_PROJECT_KEY = "devsecops-flask"
-        SONAR_PROJECT_NAME = "devsecops-flask"
+        SONARQUBE_ENV = 'sonarqube'
+        IMAGE_NAME = 'devsecops-flask'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/TriptiTech4/devsecops-flask.git'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonarqube') {
-                    script {
-                        def scannerHome = tool name: 'sonar-scanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                        sh """
-                        ${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                        -Dsonar.projectName=${SONAR_PROJECT_NAME} \
-                        -Dsonar.sources=. \
-                        -Dsonar.language=py \
-                        -Dsonar.python.version=3 \
-                        -Dsonar.sourceEncoding=UTF-8
-                        """
-                    }
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh '''
+                    sonar-scanner \
+                      -Dsonar.projectKey=devsecops-flask \
+                      -Dsonar.projectName=devsecops-flask \
+                      -Dsonar.sources=. \
+                      -Dsonar.language=py \
+                      -Dsonar.python.version=3
+                    '''
                 }
             }
         }
 
         stage('Quality Gate') {
             steps {
-                timeout(time: 10, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
+                waitForQualityGate abortPipeline: true
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh "docker build -t ${IMAGE_NAME}:latest ."
+                sh '''
+                docker build -t ${IMAGE_NAME}:latest .
+                '''
             }
         }
 
         stage('Trivy Image Scan') {
             steps {
-                sh """
-                trivy image --severity HIGH,CRITICAL --exit-code 0 ${IMAGE_NAME}:latest
-                """
+                sh '''
+                trivy image --exit-code 0 --severity LOW,MEDIUM ${IMAGE_NAME}:latest
+                trivy image --exit-code 1 --severity HIGH,CRITICAL ${IMAGE_NAME}:latest
+                '''
             }
         }
     }
@@ -62,7 +64,7 @@ pipeline {
             echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo "❌ Pipeline failed. Check logs."
+            echo "❌ Pipeline failed"
         }
     }
 }
