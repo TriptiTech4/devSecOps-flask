@@ -2,14 +2,19 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk11'
+        git 'Default'
+    }
+
+    environment {
+        SCANNER_HOME = tool 'sonar-scanner'
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/TriptiTech4/devSecOps-flask.git'
             }
         }
 
@@ -17,13 +22,24 @@ pipeline {
             steps {
                 withSonarQubeEnv('sonarqube') {
                     sh '''
-                    sonar-scanner \
+                    $SCANNER_HOME/bin/sonar-scanner \
                     -Dsonar.projectKey=devsecops-flask \
+                    -Dsonar.projectName=devsecops-flask \
                     -Dsonar.sources=. \
-                    -Dsonar.host.url=http://sonarqube:9000
+                    -Dsonar.host.url=http://sonarqube:9000 \
+                    -Dsonar.login=$SONAR_AUTH_TOKEN
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Pipeline completed successfully"
+        }
+        failure {
+            echo "❌ Pipeline failed"
         }
     }
 }
