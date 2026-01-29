@@ -1,10 +1,5 @@
 pipeline {
     agent any
-
-    tools {
-        sonarScanner 'sonar-scanner'
-    }
-
     environment {
         SONAR_PROJECT_KEY = 'devsecops-flask'
         SONAR_PROJECT_NAME = 'devsecops-flask'
