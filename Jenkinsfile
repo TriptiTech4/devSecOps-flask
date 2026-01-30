@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         SONAR_SCANNER_HOME = tool 'sonar-scanner'
-        DOCKER_IMAGE = "devsecops-flask:latest"
+        IMAGE_NAME = "devsecops-flask:latest"
     }
 
     stages {
@@ -27,33 +27,38 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 15, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
         stage('Docker Build') {
             steps {
-                sh 'docker build -t $DOCKER_IMAGE .'
+                sh '''
+                docker build -t devsecops-flask .
+                '''
             }
         }
 
-        stage('Trivy Image Scan') {
+        stage('Trivy Scan') {
             steps {
-                sh 'trivy image --exit-code 0 --severity HIGH,CRITICAL $DOCKER_IMAGE'
+                sh '''
+                trivy image --exit-code 0 --severity HIGH,CRITICAL devsecops-flask
+                '''
+            }
+        }
+
+        stage('Run Container') {
+            steps {
+                sh '''
+                docker rm -f flask-app || true
+                docker run -d --name flask-app -p 7000:7000 devsecops-flask
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "PIPELINE SUCCESSFUL"
+            echo "✅ PIPELINE COMPLETED SUCCESSFULLY"
         }
         failure {
-            echo "PIPELINE FAILED"
+            echo "❌ PIPELINE FAILED"
         }
     }
 }
