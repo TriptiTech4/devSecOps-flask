@@ -11,7 +11,7 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/Pragatitrip/DevSecOps-Flask.git'
+                    url: 'https://github.com/TriptiTech4/DevSecOps-Flask.git'
             }
         }
 
