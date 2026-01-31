@@ -2,8 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SONAR_HOST_URL = "http://localhost:9000"
-        IMAGE_NAME = "devsecops-flask-app"
+        IMAGE_NAME = "devsecops-flask"
     }
 
     stages {
@@ -22,12 +21,13 @@ pipeline {
             steps {
                 sh '''
                 docker run --rm \
+                  --network devsecops-net \
                   -v $(pwd):/usr/src \
                   sonarsource/sonar-scanner-cli \
                   -Dsonar.projectKey=devsecops-flask \
                   -Dsonar.projectName=devsecops-flask \
                   -Dsonar.sources=. \
-                  -Dsonar.host.url=${SONAR_HOST_URL} \
+                  -Dsonar.host.url=http://sonarqube:9000 \
                   -Dsonar.login=$SONAR_TOKEN
                 '''
             }
@@ -36,7 +36,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t ${IMAGE_NAME} ./app
+                docker build -t ${IMAGE_NAME} .
                 '''
             }
         }
@@ -52,8 +52,7 @@ pipeline {
                   --format HTML \
                   --out /src/dependency-check-report \
                   --disableAssembly \
-                  --failOnCVSS 11 \
-                  --noupdate || true
+                  --failOnCVSS 11 || true
                 '''
             }
         }
@@ -61,9 +60,7 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 sh '''
-                docker run --rm \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  aquasec/trivy:latest image \
+                trivy image \
                   --severity HIGH,CRITICAL \
                   --exit-code 0 \
                   ${IMAGE_NAME}
@@ -75,16 +72,13 @@ pipeline {
     post {
         always {
             archiveArtifacts artifacts: 'dependency-check-report/*.html',
-                fingerprint: true,
                 allowEmptyArchive: true
         }
-
         success {
-            echo "✅ DevSecOps Pipeline completed successfully!"
+            echo "✅ DEVSECOPS PIPELINE COMPLETED SUCCESSFULLY"
         }
-
         failure {
-            echo "❌ Pipeline failed!"
+            echo "❌ PIPELINE FAILED — CHECK SECURITY STAGES"
         }
     }
 }
