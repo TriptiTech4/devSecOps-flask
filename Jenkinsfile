@@ -2,7 +2,10 @@ pipeline {
     agent any
 
     environment {
-        IMAGE_NAME = "devsecops-flask"
+        SONAR_HOST_URL = "http://sonarqube:9000"
+        SONAR_PROJECT_KEY = "devsecops-flask"
+        SONAR_PROJECT_NAME = "devsecops-flask"
+        IMAGE_NAME = "tripti/devsecops-flask"
     }
 
     stages {
@@ -10,49 +13,40 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/TriptiTech4/DevSecOps-Flask.git'
+                    url: 'https://github.com/TriptiTech4/devSecOps-flask.git'
             }
         }
 
         stage('SonarQube SAST Analysis') {
-            environment {
-                SONAR_TOKEN = credentials('sonar-token')
-            }
             steps {
-                sh '''
-                docker run --rm \
-                  --network devsecops-net \
-                  -v $(pwd):/usr/src \
-                  sonarsource/sonar-scanner-cli \
-                  -Dsonar.projectKey=devsecops-flask \
-                  -Dsonar.projectName=devsecops-flask \
-                  -Dsonar.sources=. \
-                  -Dsonar.host.url=http://sonarqube:9000 \
-                  -Dsonar.login=$SONAR_TOKEN
-                '''
+                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                    sh '''
+                    docker run --rm \
+                      --network devsecops-net \
+                      -v $(pwd):/usr/src \
+                      sonarsource/sonar-scanner-cli \
+                      -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                      -Dsonar.projectName=${SONAR_PROJECT_NAME} \
+                      -Dsonar.sources=. \
+                      -Dsonar.host.url=${SONAR_HOST_URL} \
+                      -Dsonar.login=${SONAR_TOKEN}
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate') {
+            steps {
+                timeout(time: 2, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
             }
         }
 
         stage('Build Docker Image') {
             steps {
                 sh '''
-                docker build -t ${IMAGE_NAME} .
-                '''
-            }
-        }
-
-        stage('OWASP Dependency Check (SCA)') {
-            steps {
-                sh '''
-                docker run --rm \
-                  -v $(pwd):/src \
-                  -v dependency-check-data:/usr/share/dependency-check/data \
-                  owasp/dependency-check \
-                  --scan /src \
-                  --format HTML \
-                  --out /src/dependency-check-report \
-                  --disableAssembly \
-                  --failOnCVSS 11 || true
+                docker build -t ${IMAGE_NAME}:latest .
                 '''
             }
         }
@@ -60,25 +54,18 @@ pipeline {
         stage('Trivy Image Scan') {
             steps {
                 sh '''
-                trivy image \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  ${IMAGE_NAME}
+                trivy image --exit-code 0 --severity HIGH,CRITICAL ${IMAGE_NAME}:latest
                 '''
             }
         }
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: 'dependency-check-report/*.html',
-                allowEmptyArchive: true
-        }
         success {
-            echo "✅ DEVSECOPS PIPELINE COMPLETED SUCCESSFULLY"
+            echo "✅ Pipeline completed successfully"
         }
         failure {
-            echo "❌ PIPELINE FAILED — CHECK SECURITY STAGES"
+            echo "❌ Pipeline failed — check logs"
         }
     }
 }
